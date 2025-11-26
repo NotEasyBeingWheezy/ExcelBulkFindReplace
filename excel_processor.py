@@ -31,13 +31,19 @@ except ImportError:
 # Global configuration (loaded from JSON)
 CONFIG = {}
 
-def load_configuration(config_path="config.json"):
+def load_configuration(config_path=None):
     """Load configuration from JSON file"""
     global CONFIG
 
+    # If no path provided, look for config.json in the same directory as this script
+    if config_path is None:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(script_dir, "config.json")
+
     if not os.path.exists(config_path):
         print(f"ERROR: Configuration file not found: {config_path}")
-        print("Please create a config.json file with the required settings")
+        print("Please create a config.json file in the same directory as this script")
+        print(f"Expected location: {config_path}")
         sys.exit(1)
 
     try:
@@ -397,9 +403,8 @@ def process_excel_with_xlwings(filepath, sheet_rules):
 def main():
     """Main execution function"""
 
-    # Load configuration from JSON
-    config_file = "config.json"
-    if not load_configuration(config_file):
+    # Load configuration from JSON (will look in script's directory)
+    if not load_configuration():
         return
 
     # Setup
