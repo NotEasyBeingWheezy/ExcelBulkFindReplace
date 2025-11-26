@@ -204,9 +204,16 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
             update_col_idx = column_letter_to_index(update_col)
 
             # Create lookup dictionary: search_value -> (target_value, rule_name)
+            # Also detect duplicate search_values which would overwrite each other
             lookup = {}
             for rule in rule_group:
-                lookup[rule['search_value']] = (rule['target_value'], rule['name'])
+                search_val = rule['search_value']
+                if search_val in lookup:
+                    existing_rule = lookup[search_val][1]
+                    print(f"        WARNING: Duplicate search value '{rule['original_search']}' found!")
+                    print(f"          Rule '{existing_rule}' will be overwritten by '{rule['name']}'")
+                    logging.warning(f"Duplicate search_value '{rule['original_search']}' in rules '{existing_rule}' and '{rule['name']}' - last rule takes precedence")
+                lookup[search_val] = (rule['target_value'], rule['name'])
                 update_details[rule['name']] = 0
 
             # SINGLE PASS through all rows for this column pair
@@ -239,8 +246,9 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                             total_updates += 1
                             all_affected_rows.add(row_idx + 1)
 
-                except Exception as cell_error:
-                    # Skip problematic cells
+                except Exception:
+                    # Skip problematic cells (merged cells, formulas with errors, etc.)
+                    # Intentionally silent to avoid cluttering logs with routine Excel issues
                     continue
 
             # Print results for this column pair
@@ -295,7 +303,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
                 print(f"  Backup created: {os.path.basename(backup_path)}")
         except Exception as backup_err:
             print(f"  Backup warning: {backup_err}")
-            logging.error(f"Failed to create backup for {os.path.basename(filepath)}: {str(backup_err)}")
+            logging.exception(f"Failed to create backup for {os.path.basename(filepath)}")
 
         # Start Excel application
         print(f"  Starting Excel")
@@ -372,8 +380,8 @@ def process_excel_with_xlwings(filepath, sheet_rules):
                     try:
                         sheet.api.Unprotect(Password="")
                     except Exception as unprotect_error:
-                        print(f"      Warning: Could not unprotect sheet. Updates may be skipped.")
-                        logging.error(f"Protected sheet '{sheet_name}' in {os.path.basename(filepath)} - could not unprotect: {str(unprotect_error)}")
+                        print("      Warning: Could not unprotect sheet. Updates may be skipped.")
+                        logging.exception(f"Protected sheet '{sheet_name}' in {os.path.basename(filepath)} - could not unprotect")
             except Exception:
                 pass
 
@@ -399,7 +407,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
 
             except Exception as sheet_error:
                 print(f"      ERROR processing sheet {sheet_name}: {str(sheet_error)}")
-                logging.error(f"Error processing sheet {sheet_name}: {str(sheet_error)}")
+                logging.exception(f"Error processing sheet {sheet_name}")
                 continue
 
         if modifications_made:
@@ -415,7 +423,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
                 return True, total_updates, update_details
             except Exception as save_error:
                 print(f"  ERROR saving file: {save_error}")
-                logging.error(f"Failed to save {os.path.basename(filepath)}: {str(save_error)}")
+                logging.exception(f"Failed to save {os.path.basename(filepath)}")
                 return False, 0, {}
         else:
             print(f"  No changes needed")
@@ -424,7 +432,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
 
     except Exception as e:
         print(f"  ERROR: {str(e)}")
-        logging.error(f"Failed to process {os.path.basename(filepath)}: {str(e)}")
+        logging.exception(f"Failed to process {os.path.basename(filepath)}")
         return False, 0, {}
 
     finally:
@@ -616,8 +624,8 @@ def main():
             if count > 0:
                 print(f"  '{rule_name}': {count} updates")
 
-    print(f"\nALL Excel features preserved!")
-    print(f"\nLog files created:")
+    print("\nALL Excel features preserved!")
+    print("\nLog files created:")
     print(f"  Main log: {log_file}")
     print(f"  Error log: {error_log_file}")
 
@@ -638,7 +646,7 @@ def main():
     if failed_files > 0:
         print(f"\n⚠️  {failed_files} files failed to process. Check error log for details.")
     else:
-        print(f"\n✓ All files processed successfully!")
+        print("\n✓ All files processed successfully!")
 
 if __name__ == "__main__":
     main()
