@@ -87,11 +87,11 @@ def setup_logging():
     error_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logging.getLogger().addHandler(error_handler)
 
-    # Write header to error log
-    with open(error_log_filename, 'a', encoding='utf-8') as f:
-        f.write("="*60 + "\n")
-        f.write("EXCEL PROCESSOR - ERROR LOG\n")
-        f.write("="*60 + "\n\n")
+    # Write header to error log using handler's stream to avoid buffering issues
+    error_handler.stream.write("="*60 + "\n")
+    error_handler.stream.write("EXCEL PROCESSOR - ERROR LOG\n")
+    error_handler.stream.write("="*60 + "\n\n")
+    error_handler.stream.flush()
 
     return log_filename, error_log_filename
 
@@ -212,7 +212,8 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                     existing_rule = lookup[search_val][1]
                     print(f"        WARNING: Duplicate search value '{rule['original_search']}' found!")
                     print(f"          Rule '{existing_rule}' will be overwritten by '{rule['name']}'")
-                    logging.warning(f"Duplicate search_value '{rule['original_search']}' in rules '{existing_rule}' and '{rule['name']}' - last rule takes precedence")
+                    print(f"          Note: '{existing_rule}' will show 0 updates in statistics")
+                    logging.warning(f"Duplicate search_value '{rule['original_search']}' in rules '{existing_rule}' and '{rule['name']}' - last rule takes precedence, first rule will show 0 updates")
                 lookup[search_val] = (rule['target_value'], rule['name'])
                 update_details[rule['name']] = 0
 
@@ -248,7 +249,8 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
 
                 except Exception:
                     # Skip problematic cells (merged cells, formulas with errors, etc.)
-                    # Intentionally silent to avoid cluttering logs with routine Excel issues
+                    # Log at DEBUG level to help troubleshooting without cluttering production logs
+                    logging.debug(f"Skipped cell at row {row_idx + 1}, column index {search_col_idx}", exc_info=True)
                     continue
 
             # Print results for this column pair
@@ -628,6 +630,10 @@ def main():
     print("\nLog files created:")
     print(f"  Main log: {log_file}")
     print(f"  Error log: {error_log_file}")
+
+    # Flush all handlers before writing error summary to ensure proper ordering
+    for handler in logging.getLogger().handlers:
+        handler.flush()
 
     # Write error summary to error log
     with open(error_log_file, 'a', encoding='utf-8') as f:
