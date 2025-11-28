@@ -59,17 +59,41 @@ def load_configuration(config_path=None):
         sys.exit(1)
 
 def setup_logging():
-    """Set up logging to track progress and errors"""
-    log_filename = f"excel_processor_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    """Set up logging to track progress and errors - creates two log files"""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # Main log file (all messages)
+    log_filename = f"excel_processor_log_{timestamp}.txt"
+
+    # Error-only log file
+    error_log_filename = f"excel_processor_errors_{timestamp}.txt"
+
+    # Clear any existing handlers
+    logging.root.handlers = []
+
+    # Create main logger
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_filename),
+            logging.FileHandler(log_filename, encoding='utf-8'),
             logging.StreamHandler()
         ]
     )
-    return log_filename
+
+    # Add error-only file handler
+    error_handler = logging.FileHandler(error_log_filename, encoding='utf-8')
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logging.getLogger().addHandler(error_handler)
+
+    # Write header to error log using handler's stream to avoid buffering issues
+    error_handler.stream.write("="*60 + "\n")
+    error_handler.stream.write("EXCEL PROCESSOR - ERROR LOG\n")
+    error_handler.stream.write("="*60 + "\n\n")
+    error_handler.stream.flush()
+
+    return log_filename, error_log_filename
 
 def create_backup(filepath):
     """Create a backup of the original file"""
@@ -180,9 +204,17 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
             update_col_idx = column_letter_to_index(update_col)
 
             # Create lookup dictionary: search_value -> (target_value, rule_name)
+            # Also detect duplicate search_values which would overwrite each other
             lookup = {}
             for rule in rule_group:
-                lookup[rule['search_value']] = (rule['target_value'], rule['name'])
+                search_val = rule['search_value']
+                if search_val in lookup:
+                    existing_rule = lookup[search_val][1]
+                    print(f"        WARNING: Duplicate search value '{rule['original_search']}' found!")
+                    print(f"          Rule '{existing_rule}' will be overwritten by '{rule['name']}'")
+                    print(f"          Note: '{existing_rule}' will show 0 updates in statistics")
+                    logging.warning(f"Duplicate search_value '{rule['original_search']}' in rules '{existing_rule}' and '{rule['name']}' - last rule takes precedence, first rule will show 0 updates")
+                lookup[search_val] = (rule['target_value'], rule['name'])
                 update_details[rule['name']] = 0
 
             # SINGLE PASS through all rows for this column pair
@@ -215,8 +247,10 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                             total_updates += 1
                             all_affected_rows.add(row_idx + 1)
 
-                except Exception as cell_error:
-                    # Skip problematic cells
+                except Exception:
+                    # Skip problematic cells (merged cells, formulas with errors, etc.)
+                    # Log at DEBUG level to help troubleshooting without cluttering production logs
+                    logging.debug(f"Skipped cell at row {row_idx + 1}, column index {search_col_idx}", exc_info=True)
                     continue
 
             # Print results for this column pair
@@ -271,6 +305,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
                 print(f"  Backup created: {os.path.basename(backup_path)}")
         except Exception as backup_err:
             print(f"  Backup warning: {backup_err}")
+            logging.exception(f"Failed to create backup for {os.path.basename(filepath)}")
 
         # Start Excel application
         print(f"  Starting Excel")
@@ -346,8 +381,9 @@ def process_excel_with_xlwings(filepath, sheet_rules):
                     print(f"      Notice: Sheet is protected; attempting to unprotect")
                     try:
                         sheet.api.Unprotect(Password="")
-                    except Exception:
-                        print(f"      Warning: Could not unprotect sheet. Updates may be skipped.")
+                    except Exception as unprotect_error:
+                        print("      Warning: Could not unprotect sheet. Updates may be skipped.")
+                        logging.exception(f"Protected sheet '{sheet_name}' in {os.path.basename(filepath)} - could not unprotect")
             except Exception:
                 pass
 
@@ -373,7 +409,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
 
             except Exception as sheet_error:
                 print(f"      ERROR processing sheet {sheet_name}: {str(sheet_error)}")
-                logging.error(f"Error processing sheet {sheet_name}: {str(sheet_error)}")
+                logging.exception(f"Error processing sheet {sheet_name}")
                 continue
 
         if modifications_made:
@@ -389,6 +425,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
                 return True, total_updates, update_details
             except Exception as save_error:
                 print(f"  ERROR saving file: {save_error}")
+                logging.exception(f"Failed to save {os.path.basename(filepath)}")
                 return False, 0, {}
         else:
             print(f"  No changes needed")
@@ -397,7 +434,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
 
     except Exception as e:
         print(f"  ERROR: {str(e)}")
-        logging.error(f"Failed to process {os.path.basename(filepath)}: {str(e)}")
+        logging.exception(f"Failed to process {os.path.basename(filepath)}")
         return False, 0, {}
 
     finally:
@@ -438,8 +475,10 @@ def main():
         print("\nCannot proceed without Excel. Please install Microsoft Excel and try again.")
         return
 
-    log_file = setup_logging()
+    log_file, error_log_file = setup_logging()
     logging.info(f"Starting Excel search and update operation on {system_info}")
+    print(f"Main log: {log_file}")
+    print(f"Error log: {error_log_file}")
 
     # Get directory based on platform
     folder_paths = CONFIG.get('folder_paths', {})
@@ -587,11 +626,33 @@ def main():
             if count > 0:
                 print(f"  '{rule_name}': {count} updates")
 
-    print(f"\nALL Excel features preserved!")
-    print(f"Log saved: {log_file}")
+    print("\nALL Excel features preserved!")
+    print("\nLog files created:")
+    print(f"  Main log: {log_file}")
+    print(f"  Error log: {error_log_file}")
+
+    # Flush all handlers before writing error summary to ensure proper ordering
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+
+    # Write error summary to error log
+    with open(error_log_file, 'a', encoding='utf-8') as f:
+        f.write("\n" + "="*60 + "\n")
+        f.write("ERROR SUMMARY\n")
+        f.write("="*60 + "\n")
+        f.write(f"Total files processed: {total_files}\n")
+        f.write(f"Successful: {successful_files}\n")
+        f.write(f"Failed: {failed_files}\n")
+        if failed_files == 0:
+            f.write("\n[SUCCESS] No errors occurred during processing!\n")
+        else:
+            f.write(f"\n[ERROR] {failed_files} file(s) encountered errors.\n")
+            f.write("See error messages above for details.\n")
 
     if failed_files > 0:
-        print(f"\n{failed_files} files failed to process. Check the log for details.")
+        print(f"\n⚠️  {failed_files} files failed to process. Check error log for details.")
+    else:
+        print("\n✓ All files processed successfully!")
 
 if __name__ == "__main__":
     main()
