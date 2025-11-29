@@ -225,25 +225,31 @@ If you're on macOS, you'll get "Grant Access" prompts for each Excel file.
 
 **Why this happens:** Excel 2016+ on macOS is sandboxed for security. **Note: macOS Excel does NOT have "Trusted Locations" like Windows Excel.**
 
-**BEST SOLUTION - Move Files to Sandboxed Folders:**
+**AUTOMATIC SOLUTION (Recommended):**
 
-Move your Excel files to one of these locations to avoid prompts:
+The script includes an **auto-clicker** that can automatically click "Grant Access" for you!
+
+When you run the script on macOS, it will ask:
+```
+Start automatic Grant Access clicker? (y/n):
+```
+
+**Type 'y'** and the script will handle all the prompts automatically!
+
+**Requirements for auto-clicker:**
+1. Go to: **System Settings > Privacy & Security > Accessibility**
+2. Add **Terminal** (or your Python app) to the list
+3. Enable the toggle
+4. Run the script
+
+**Alternative - Move Files to Sandboxed Folders:**
+
+Move your Excel files to one of these locations to avoid prompts entirely:
 - `~/Documents/` (Documents folder)
 - `~/Desktop/` (Desktop folder)
 - `~/Library/Group Containers/UBF8T346G9.Office/` (Excel's container)
 
-**Other Options:**
-
-1. **Grant Access Once:** After clicking "Grant Access" the first time, macOS may remember your choice for future sessions
-
-2. **AppleScript Automation (Advanced):**
-   - Enable: System Settings > Privacy & Security > Automation
-   - Allow Terminal/Python to control System Events
-   - The script can then auto-click "Grant Access" buttons
-
-3. **Run from Terminal:** Some IDEs (PyCharm, VS Code) have permission bugs. Running from Terminal first can help establish proper permissions.
-
-**The script will detect if you're on macOS and provide guidance automatically.**
+**Note:** Even Documents/Desktop may still prompt sometimes. The auto-clicker is the most reliable solution.
 
 ### Excel Not Found
 - Ensure Microsoft Excel is installed
