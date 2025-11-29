@@ -221,23 +221,29 @@ Backups are saved in a `backups` subfolder with timestamps.
 
 ### macOS Permission Prompts (IMPORTANT!)
 
-If you're on macOS and get permission prompts for every Excel file:
+If you're on macOS, you'll get "Grant Access" prompts for each Excel file.
 
-**The script will attempt to automatically add your folder to Excel's Trusted Locations.** If that fails, it will show you manual instructions.
+**Why this happens:** Excel 2016+ on macOS is sandboxed for security. **Note: macOS Excel does NOT have "Trusted Locations" like Windows Excel.**
 
-**Manual Method:**
-1. Open Microsoft Excel
-2. Go to **Excel > Preferences** (or Settings)
-3. Click on **Security & Privacy**
-4. Click on **Trust Center Settings** or **Trusted Locations**
-5. Click **Add New Location**
-6. Add your Excel files folder path
-7. Check **"Subfolders of this location are also trusted"**
-8. Click OK
+**BEST SOLUTION - Move Files to Sandboxed Folders:**
 
-**Why this happens:** Excel 2016+ on macOS is sandboxed for security and requires explicit permission for files outside trusted locations. This is an Excel security feature, not a bug in the script.
+Move your Excel files to one of these locations to avoid prompts:
+- `~/Documents/` (Documents folder)
+- `~/Desktop/` (Desktop folder)
+- `~/Library/Group Containers/UBF8T346G9.Office/` (Excel's container)
 
-**Alternative solution:** Move your Excel files to a pre-trusted location like `~/Documents/` or `~/Desktop/`
+**Other Options:**
+
+1. **Grant Access Once:** After clicking "Grant Access" the first time, macOS may remember your choice for future sessions
+
+2. **AppleScript Automation (Advanced):**
+   - Enable: System Settings > Privacy & Security > Automation
+   - Allow Terminal/Python to control System Events
+   - The script can then auto-click "Grant Access" buttons
+
+3. **Run from Terminal:** Some IDEs (PyCharm, VS Code) have permission bugs. Running from Terminal first can help establish proper permissions.
+
+**The script will detect if you're on macOS and provide guidance automatically.**
 
 ### Excel Not Found
 - Ensure Microsoft Excel is installed

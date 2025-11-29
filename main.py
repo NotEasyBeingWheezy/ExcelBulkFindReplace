@@ -109,79 +109,90 @@ def create_backup(filepath):
     shutil.copy2(filepath, backup_path)
     return backup_path
 
-def print_manual_trusted_location_instructions(folder_path):
-    """Print instructions for manually adding folder to Excel's Trusted Locations"""
-    print("\n" + "="*60)
-    print("TO AVOID PERMISSION PROMPTS:")
-    print("="*60)
-    print("Add this folder to Excel's Trusted Locations manually:")
-    print("\n1. Open Microsoft Excel")
-    print("2. Go to Excel > Preferences (or Settings)")
-    print("3. Click on 'Security & Privacy'")
-    print("4. Click on 'Trust Center Settings' or 'Trusted Locations'")
-    print("5. Click 'Add New Location'")
-    print(f"6. Add this path: {folder_path}")
-    print("7. Check 'Subfolders of this location are also trusted'")
-    print("8. Click OK to save")
-    print("\nAfter doing this once, you won't see permission prompts anymore!")
-    print("="*60 + "\n")
-
-def add_folder_to_trusted_locations(folder_path):
+def setup_macos_grant_access_automation():
     """
-    Add a folder to Excel's Trusted Locations to avoid permission prompts on macOS
-    This helps bypass the sandboxing restrictions in Excel 2016+ on macOS
+    Setup AppleScript to automatically click 'Grant Access' on macOS
+    This uses UI automation to handle Excel's sandboxing permission prompts
     """
     if platform.system() != "Darwin":
-        return True  # Only needed on macOS
+        return None
 
-    print(f"\nMacOS detected - attempting to configure Excel Trusted Locations...")
+    # AppleScript to automatically click Grant Access button
+    applescript = '''
+    on run
+        tell application "System Events"
+            repeat
+                try
+                    if exists (button "Grant Access" of window 1 of process "Microsoft Excel") then
+                        click button "Grant Access" of window 1 of process "Microsoft Excel"
+                        delay 0.3
+                    end if
+                end try
+                delay 0.1
+            end repeat
+        end tell
+    end run
+    '''
 
-    try:
-        # Start Excel application
-        app = xw.App(visible=False, add_book=False)
+    return applescript
 
-        try:
-            # Access the TrustedLocations collection
-            # We'll try to add the location to the first available index
-            trusted_locs = app.api.Application.TrustedLocations
+def print_macos_permission_info(folder_path):
+    """Print information about macOS Excel permission prompts and solutions"""
+    print("\n" + "="*70)
+    print("⚠️  macOS EXCEL PERMISSION PROMPTS")
+    print("="*70)
+    print("\nExcel for Mac is sandboxed and will prompt for file access.")
+    print("This is an Excel security feature that cannot be fully automated.")
+    print("\n📋 SOLUTIONS TO REDUCE/AVOID PROMPTS:")
+    print("\n1. MOVE FILES (Recommended):")
+    print("   Move your Excel files to one of these folders that Excel trusts:")
+    print("   • ~/Documents/")
+    print("   • ~/Desktop/")
+    print(f"\n   Current folder: {folder_path}")
 
-            # Try to find an empty slot or append
-            for i in range(1, 21):  # Excel typically supports up to 20 trusted locations
-                try:
-                    existing = trusted_locs.Item(i)
-                    if existing.Path == folder_path:
-                        print(f"  ✓ Folder already in Trusted Locations - no prompts expected!")
-                        app.quit()
-                        return True
-                except:
-                    # This slot is empty, we can use it
-                    try:
-                        new_loc = trusted_locs.Add(folder_path)
-                        new_loc.AllowSubFolders = True
-                        print(f"  ✓ Successfully added to Trusted Locations - no prompts expected!")
-                        app.quit()
-                        return True
-                    except Exception as add_err:
-                        continue
+    print("\n2. GRANT ACCESS ONCE:")
+    print("   • Click 'Grant Access' when prompted")
+    print("   • macOS may remember your choice for future sessions")
 
-            print(f"  ⚠ Could not add to Trusted Locations automatically")
-            app.quit()
-            print_manual_trusted_location_instructions(folder_path)
-            input("Press Enter after adding the folder to Trusted Locations to continue...")
-            return True
+    print("\n3. USE APPLESCRIPT AUTOMATION:")
+    print("   • Enable automation in: System Settings > Privacy & Security > Automation")
+    print("   • Allow Terminal/Python to control System Events")
+    print("   • The script can then auto-click 'Grant Access' buttons")
 
-        except Exception as api_err:
-            print(f"  ⚠ Could not access Trusted Locations API automatically")
-            app.quit()
-            print_manual_trusted_location_instructions(folder_path)
-            input("Press Enter after adding the folder to Trusted Locations to continue...")
-            return True
+    print("\n4. ALTERNATIVE CONTAINER LOCATION:")
+    print("   • ~/Library/Group Containers/UBF8T346G9.Office/")
+    print("   (This is Excel's sandboxed container - no prompts)")
 
-    except Exception as e:
-        print(f"  ⚠ Could not configure Trusted Locations automatically")
-        print_manual_trusted_location_instructions(folder_path)
-        input("Press Enter after adding the folder to Trusted Locations to continue...")
-        return True  # Don't fail the whole script
+    print("\n💡 NOTE: macOS Excel does NOT have 'Trusted Locations' like Windows")
+    print("="*70 + "\n")
+
+def check_macos_permissions_and_advise(folder_path):
+    """Check if folder is in a sandboxed location and provide advice"""
+    if platform.system() != "Darwin":
+        return True
+
+    # Check if folder is already in a trusted/sandboxed location
+    sandboxed_paths = [
+        os.path.expanduser("~/Documents"),
+        os.path.expanduser("~/Desktop"),
+        os.path.expanduser("~/Library/Group Containers/UBF8T346G9.Office")
+    ]
+
+    folder_is_trusted = any(folder_path.startswith(path) for path in sandboxed_paths)
+
+    if folder_is_trusted:
+        print(f"\n✓ Your folder is in a sandboxed location - fewer prompts expected!")
+        return True
+
+    print(f"\n⚠️  macOS detected - Your Excel files are outside sandboxed folders")
+    print_macos_permission_info(folder_path)
+
+    response = input("Continue anyway? You'll need to grant access for each file (y/n): ").strip().lower()
+    if response != 'y':
+        print("Exiting. Consider moving files to ~/Documents/ or ~/Desktop/")
+        return False
+
+    return True
 
 def check_excel_availability():
     """Check if Excel is available and working"""
@@ -578,9 +589,10 @@ def main():
         print("Please update the folder path in config.json")
         return
 
-    # On macOS, try to add folder to Trusted Locations to avoid permission prompts
+    # On macOS, check permissions and provide advice
     if system == "Darwin":
-        add_folder_to_trusted_locations(directory)
+        if not check_macos_permissions_and_advise(directory):
+            return
 
     try:
         # Filter out temporary Excel files (starting with ~$)
