@@ -15,6 +15,7 @@ import os
 import sys
 import shutil
 import platform
+import gc
 from datetime import datetime
 import logging
 import json
@@ -59,14 +60,17 @@ def load_configuration(config_path=None):
         sys.exit(1)
 
 def setup_logging():
-    """Set up logging to track progress and errors - creates two log files"""
+    """Set up logging to track progress and errors - creates three log files"""
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-    # Main log file (all messages)
+    # Main log file (all messages except "no changes")
     log_filename = f"excel_processor_log_{timestamp}.txt"
 
     # Error-only log file
     error_log_filename = f"excel_processor_errors_{timestamp}.txt"
+
+    # No changes log file (files with no sheets found or no changes made)
+    no_changes_log_filename = f"excel_processor_no_changes_{timestamp}.txt"
 
     # Clear any existing handlers
     logging.root.handlers = []
@@ -93,7 +97,22 @@ def setup_logging():
     error_handler.stream.write("="*60 + "\n\n")
     error_handler.stream.flush()
 
-    return log_filename, error_log_filename
+    # Create custom logger for "no changes" tracking
+    no_changes_logger = logging.getLogger('no_changes')
+    no_changes_logger.setLevel(logging.INFO)
+    no_changes_handler = logging.FileHandler(no_changes_log_filename, encoding='utf-8')
+    no_changes_handler.setFormatter(logging.Formatter('%(message)s'))  # Simple format, just the message
+    no_changes_logger.addHandler(no_changes_handler)
+    no_changes_logger.propagate = False  # Don't propagate to root logger
+
+    # Write header to no changes log
+    no_changes_handler.stream.write("="*60 + "\n")
+    no_changes_handler.stream.write("EXCEL PROCESSOR - NO CHANGES LOG\n")
+    no_changes_handler.stream.write("Files with no matching sheets or no changes made\n")
+    no_changes_handler.stream.write("="*60 + "\n\n")
+    no_changes_handler.stream.flush()
+
+    return log_filename, error_log_filename, no_changes_log_filename
 
 def create_backup(filepath):
     """Create a backup of the original file"""
@@ -274,9 +293,14 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
         print(f"      Error analyzing sheet: {e}")
         return 0, {}
 
-def process_excel_with_xlwings(filepath, sheet_rules):
+def process_excel_with_xlwings(app, filepath, sheet_rules):
     """
     Process Excel file using xlwings with search-and-update logic
+
+    Parameters:
+        app: xlwings App instance (reused across multiple files)
+        filepath: Path to Excel file
+        sheet_rules: Dict of rules organized by sheet name
 
     sheet_rules should be a dict like:
     {
@@ -291,7 +315,6 @@ def process_excel_with_xlwings(filepath, sheet_rules):
         ]
     }
     """
-    app = None
     wb = None
 
     try:
@@ -307,39 +330,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
             print(f"  Backup warning: {backup_err}")
             logging.exception(f"Failed to create backup for {os.path.basename(filepath)}")
 
-        # Start Excel application
-        print(f"  Starting Excel")
-        app = xw.App(visible=False, add_book=False)
-
-        # Reduce prompts and speed up processing
-        try:
-            app.display_alerts = False
-            app.screen_updating = False
-            try:
-                app.api.AskToUpdateLinks = False
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-        # Temporarily disable calc/events for performance
-        calc_prev = None
-        events_prev = None
-        try:
-            try:
-                calc_prev = app.api.Calculation
-                app.api.Calculation = -4135  # xlCalculationManual
-            except Exception:
-                pass
-            try:
-                events_prev = app.api.EnableEvents
-                app.api.EnableEvents = False
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-        # Open workbook
+        # Open workbook (reusing existing app)
         print(f"  Opening workbook")
         try:
             wb = app.books.open(
@@ -358,6 +349,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
         modifications_made = False
         total_updates = 0
         update_details = {}
+        sheets_with_no_rules = []  # Track sheets without configured rules
 
         print(f"  Found {len(wb.sheets)} sheets to process")
 
@@ -368,6 +360,7 @@ def process_excel_with_xlwings(filepath, sheet_rules):
             # Check if we have rules for this sheet
             if sheet_name not in sheet_rules:
                 print(f"      Skipping (no rules configured for this sheet)")
+                sheets_with_no_rules.append(sheet_name)
                 continue
 
             rules = sheet_rules[sheet_name]
@@ -428,8 +421,17 @@ def process_excel_with_xlwings(filepath, sheet_rules):
                 logging.exception(f"Failed to save {os.path.basename(filepath)}")
                 return False, 0, {}
         else:
+            # No modifications made - log to no_changes logger
             print(f"  No changes needed")
-            logging.info(f"- {os.path.basename(filepath)}: No matches found")
+            no_changes_logger = logging.getLogger('no_changes')
+
+            # Build detailed message for no changes log
+            filename = os.path.basename(filepath)
+            if sheets_with_no_rules:
+                no_changes_logger.info(f"{filename} - No configured sheets found: {', '.join(sheets_with_no_rules)}")
+            else:
+                no_changes_logger.info(f"{filename} - No changes needed")
+
             return True, 0, update_details
 
     except Exception as e:
@@ -438,23 +440,10 @@ def process_excel_with_xlwings(filepath, sheet_rules):
         return False, 0, {}
 
     finally:
-        # Clean up
+        # Clean up - only close workbook, keep app running for next file
         try:
-            # Restore calc/events
-            try:
-                if events_prev is not None:
-                    app.api.EnableEvents = events_prev
-            except Exception:
-                pass
-            try:
-                if calc_prev is not None:
-                    app.api.Calculation = calc_prev
-            except Exception:
-                pass
             if wb:
                 wb.close()
-            if app:
-                app.quit()
         except Exception as cleanup_error:
             print(f"  Cleanup warning: {cleanup_error}")
 
@@ -475,10 +464,11 @@ def main():
         print("\nCannot proceed without Excel. Please install Microsoft Excel and try again.")
         return
 
-    log_file, error_log_file = setup_logging()
+    log_file, error_log_file, no_changes_log_file = setup_logging()
     logging.info(f"Starting Excel search and update operation on {system_info}")
     print(f"Main log: {log_file}")
     print(f"Error log: {error_log_file}")
+    print(f"No changes log: {no_changes_log_file}")
 
     # Get directory based on platform
     folder_paths = CONFIG.get('folder_paths', {})
@@ -577,37 +567,84 @@ def main():
     except Exception:
         pass
 
-    process_delay = CONFIG.get('general_settings', {}).get('process_delay_seconds', 0)
+    # Create single Excel app instance for all files (major performance optimization)
+    print("\nInitializing Excel application (reused across all files)...")
+    app = None
+    try:
+        app = xw.App(visible=False, add_book=False)
 
-    for i, filename in enumerate(excel_files, 1):
-        filepath = os.path.join(directory, filename)
-        print(f"\nFile {i}/{total_files}: {filename}")
-        logging.info(f"Processing {i}/{total_files}: {filename}")
+        # Configure app settings once for all files
+        try:
+            app.display_alerts = False
+            app.screen_updating = False
+            try:
+                app.api.AskToUpdateLinks = False
+            except Exception:
+                pass
+        except Exception:
+            pass
 
-        file_start_time = time.time()
+        # Disable calc/events for performance (kept disabled throughout)
+        try:
+            try:
+                app.api.Calculation = -4135  # xlCalculationManual
+            except Exception:
+                pass
+            try:
+                app.api.EnableEvents = False
+            except Exception:
+                pass
+        except Exception:
+            pass
 
-        success, updates, update_details = process_excel_with_xlwings(
-            filepath,
-            sheet_rules
-        )
+        print("✓ Excel application initialized\n")
 
-        file_duration = time.time() - file_start_time
-        print(f"  Processing time: {file_duration:.1f} seconds")
+        process_delay = CONFIG.get('general_settings', {}).get('process_delay_seconds', 0)
 
-        if success:
-            successful_files += 1
-            total_updates += updates
-            # Add to overall stats
-            for rule_name, count in update_details.items():
-                if rule_name not in overall_update_stats:
-                    overall_update_stats[rule_name] = 0
-                overall_update_stats[rule_name] += count
-        else:
-            failed_files += 1
+        for i, filename in enumerate(excel_files, 1):
+            filepath = os.path.join(directory, filename)
+            print(f"\nFile {i}/{total_files}: {filename}")
+            logging.info(f"Processing {i}/{total_files}: {filename}")
 
-        # Optional delay between files (default 0 for speed)
-        if process_delay > 0:
-            time.sleep(process_delay)
+            file_start_time = time.time()
+
+            success, updates, update_details = process_excel_with_xlwings(
+                app,  # Pass existing app instance
+                filepath,
+                sheet_rules
+            )
+
+            file_duration = time.time() - file_start_time
+            print(f"  Processing time: {file_duration:.1f} seconds")
+
+            if success:
+                successful_files += 1
+                total_updates += updates
+                # Add to overall stats
+                for rule_name, count in update_details.items():
+                    if rule_name not in overall_update_stats:
+                        overall_update_stats[rule_name] = 0
+                    overall_update_stats[rule_name] += count
+            else:
+                failed_files += 1
+
+            # Optional delay between files (default 0 for speed)
+            if process_delay > 0:
+                time.sleep(process_delay)
+
+            # Periodic garbage collection to prevent memory buildup
+            if i % 10 == 0:
+                gc.collect()
+
+    finally:
+        # Clean up Excel app after all files
+        if app:
+            try:
+                print("\nShutting down Excel application...")
+                app.quit()
+                print("✓ Excel application closed")
+            except Exception as e:
+                print(f"Warning: Error closing Excel: {e}")
 
     total_duration = time.time() - start_time
 
@@ -630,9 +667,15 @@ def main():
     print("\nLog files created:")
     print(f"  Main log: {log_file}")
     print(f"  Error log: {error_log_file}")
+    print(f"  No changes log: {no_changes_log_file}")
 
     # Flush all handlers before writing error summary to ensure proper ordering
     for handler in logging.getLogger().handlers:
+        handler.flush()
+
+    # Also flush the no_changes logger
+    no_changes_logger = logging.getLogger('no_changes')
+    for handler in no_changes_logger.handlers:
         handler.flush()
 
     # Write error summary to error log
