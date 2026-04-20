@@ -31,10 +31,12 @@
   ],
   "notes": {
     "description": "Configuration file for Excel processor",
-    "search_column": "The column to search for the search_value",
-    "search_value": "The value to find in the search_column. Use \"*\" to match any non-empty cell (wildcard). Exact matches take precedence over a wildcard on the same column pair.",
-    "update_column": "The column to check and potentially update in the same row",
-    "target_value": "The desired value for the update_column. If different, it will be updated.",
+    "rule_modes": "Two modes: (1) search-based using search_column+search_value+update_column, (2) direct cell using target_cell",
+    "target_cell": "Optional. Directly replace a specific cell (e.g. 'B3') with target_value, regardless of its current content. When set, search_column/search_value/update_column are not needed.",
+    "search_column": "The column to search for the search_value (search-based mode only)",
+    "search_value": "The value to find in the search_column (search-based mode only)",
+    "update_column": "The column to check and potentially update in the same row (search-based mode only)",
+    "target_value": "The desired value to write. Used by both modes.",
     "columns": "Use column letters like 'A', 'B', 'Z', 'AA', etc."
   }
 }
