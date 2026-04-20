@@ -11,21 +11,30 @@
   },
   "search_and_update_rules": [
     {
-      "name": "Replace initials X coordinate of 23.37 with 23.47",
+      "name": "Replace StemGuard Junior Description",
       "sheet_name": "Std Cricket Products Upload",
-      "search_column": "CY",
-      "search_value": "23.37",
-      "update_column": "CY",
-      "target_value": "23.47",
+      "search_column": "M",
+      "search_value": "MASMSTML",
+      "update_column": "z",
+      "target_value": "Introducing StemGuard Lite 2.0 Junior.<br><br>The lightest neck protector on the market is here.<br><br>Built on the DNA of Masuri’s industry-leading StemGuard PRO, the all-new StemGuard Lite 2.0 raises the bar — delivering greater freedom of movement than any neck protector available, while still providing more than double the protection required by the safety standard.<br><br>Engineered from Masuri PRO-FOAM, the pre-curved single-piece design contours naturally to the neck for maximum ergonomic comfort. Clips directly onto any current Masuri Junior steel grill helmet.<br><br>Compliant with BS 7928:2013+A1 2019.",
       "enabled": true
     },
     {
-      "name": "Replace initials X coordinate of 23.37 with 23.47",
+      "name": "Replace StemGuard Junior Image",
       "sheet_name": "Std Cricket Products Upload",
-      "search_column": "CY",
-      "search_value": "23.7",
-      "update_column": "CY",
-      "target_value": "23.47",
+      "search_column": "M",
+      "search_value": "MASMSTML",
+      "update_column": "AZ",
+      "target_value": "https://store-9ong3twjo7.mybigcommerce.com/content/Stem%20Guards/StemGuard-Lite-2.0.jpg",
+      "enabled": true
+    },
+    {
+      "name": "Replace StemGuard Junior Second Image",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASMSTML",
+      "update_column": "BA",
+      "target_value": "https://store-9ong3twjo7.mybigcommerce.com/content/Stem%20Guards/StemGuard-Lite-2.0.jpg",
       "enabled": true
     }
   ],
