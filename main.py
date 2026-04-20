@@ -190,17 +190,6 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
 
             print(f"      Sheet has {rows} rows x {cols} columns; processing first {rows_to_process} rows")
 
-            # Bulk-read all cell values in one COM call instead of per-cell reads
-            raw = used_range.value
-            if rows == 1 and cols == 1:
-                all_data = [[raw]]
-            elif rows == 1:
-                all_data = [raw]
-            elif cols == 1:
-                all_data = [[v] for v in raw]
-            else:
-                all_data = raw
-
         except Exception as e:
             print(f"      Could not determine sheet size: {e}")
             return 0, {}
@@ -253,8 +242,9 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
             # SINGLE PASS through all rows for this column pair
             for row_idx in range(rows_to_process):
                 try:
-                    # Read from in-memory bulk data (no COM call)
-                    search_cell_value = all_data[row_idx][search_col_idx]
+                    # Get the search cell value
+                    search_cell = used_range[row_idx, search_col_idx]
+                    search_cell_value = search_cell.value
 
                     if not search_cell_value:
                         continue
@@ -270,14 +260,15 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                     else:
                         continue
 
-                    # Read current update cell value from in-memory bulk data (no COM call)
-                    current_value = all_data[row_idx][update_col_idx]
+                    # Get the update cell
+                    update_cell = used_range[row_idx, update_col_idx]
+                    current_value = update_cell.value
                     current_value_str = str(current_value) if current_value is not None else ""
 
                     # Check if update is needed
                     if current_value_str.strip() != target_value.strip():
-                        # Write via COM only for cells that actually changed
-                        used_range[row_idx, update_col_idx].value = target_value
+                        # Update the cell
+                        update_cell.value = target_value
                         update_details[rule_name] += 1
                         total_updates += 1
                         all_affected_rows.add(row_idx + 1)
