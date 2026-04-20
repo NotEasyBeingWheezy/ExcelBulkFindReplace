@@ -32,7 +32,7 @@
   "notes": {
     "description": "Configuration file for Excel processor",
     "search_column": "The column to search for the search_value",
-    "search_value": "The value to find in the search_column",
+    "search_value": "The value to find in the search_column. Use \"*\" to match any non-empty cell (wildcard). Exact matches take precedence over a wildcard on the same column pair.",
     "update_column": "The column to check and potentially update in the same row",
     "target_value": "The desired value for the update_column. If different, it will be updated.",
     "columns": "Use column letters like 'A', 'B', 'Z', 'AA', etc."
