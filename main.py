@@ -187,6 +187,9 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
 
             rows, cols = used_range.shape
             rows_to_process = min(rows, max_rows_to_process)
+            # Capture origin so absolute column indices can be converted to relative offsets
+            origin_row = used_range.row      # 1-based sheet row of first cell in used range
+            origin_col = used_range.column - 1  # 0-based sheet column of first cell
 
             print(f"      Sheet has {rows} rows x {cols} columns; processing first {rows_to_process} rows")
 
@@ -232,9 +235,9 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
         for (search_col, update_col), rule_group in grouped_rules.items():
             print(f"      Processing column pair: {search_col} -> {update_col} ({len(rule_group)} rules)")
 
-            # Convert column letters to indices
-            search_col_idx = column_letter_to_index(search_col)
-            update_col_idx = column_letter_to_index(update_col)
+            # Convert column letters to indices, then make relative to the used range origin
+            search_col_idx = column_letter_to_index(search_col) - origin_col
+            update_col_idx = column_letter_to_index(update_col) - origin_col
 
             # Create lookup dictionary: search_value -> (target_value, rule_name)
             # Also detect duplicate search_values which would overwrite each other
@@ -256,7 +259,7 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                     # Read from in-memory bulk data (no COM call)
                     search_cell_value = all_data[row_idx][search_col_idx]
 
-                    if not search_cell_value:
+                    if search_cell_value is None or (isinstance(search_cell_value, str) and not search_cell_value.strip()):
                         continue
 
                     # Normalize the search value
@@ -280,12 +283,12 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                         used_range[row_idx, update_col_idx].value = target_value
                         update_details[rule_name] += 1
                         total_updates += 1
-                        all_affected_rows.add(row_idx + 1)
+                        all_affected_rows.add(origin_row + row_idx)
 
                 except Exception:
                     # Skip problematic cells (merged cells, formulas with errors, etc.)
                     # Log at DEBUG level to help troubleshooting without cluttering production logs
-                    logging.debug(f"Skipped cell at row {row_idx + 1}, column index {search_col_idx}", exc_info=True)
+                    logging.debug(f"Skipped cell at row {origin_row + row_idx}, column index {search_col_idx}", exc_info=True)
                     continue
 
             # Print results for this column pair
