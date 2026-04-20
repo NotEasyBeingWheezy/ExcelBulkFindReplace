@@ -173,13 +173,12 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
     Use "*" as search_value to match any non-empty cell in search_column.
     Exact matches take precedence over a wildcard on the same column pair.
 
-    OPTIMIZATION: Groups rules by column pair; reads only the needed columns
-    per group rather than the entire used range.
+    OPTIMIZATION: Groups rules by column pair and processes in a single pass
     """
     try:
         print(f"      Analyzing sheet structure")
 
-        # Get used range to determine row bounds only
+        # Get used range safely
         try:
             used_range = sheet.used_range
             if used_range is None:
@@ -188,10 +187,22 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
 
             rows, cols = used_range.shape
             rows_to_process = min(rows, max_rows_to_process)
-            first_row = used_range.row  # 1-based sheet row where data starts
-            last_row = first_row + rows_to_process - 1
+            # Capture origin so absolute column indices can be converted to relative offsets
+            origin_row = used_range.row      # 1-based sheet row of first cell in used range
+            origin_col = used_range.column - 1  # 0-based sheet column of first cell
 
             print(f"      Sheet has {rows} rows x {cols} columns; processing first {rows_to_process} rows")
+
+            # Bulk-read all cell values in one COM call instead of per-cell reads
+            raw = used_range.value
+            if rows == 1 and cols == 1:
+                all_data = [[raw]]
+            elif rows == 1:
+                all_data = [raw]
+            elif cols == 1:
+                all_data = [[v] for v in raw]
+            else:
+                all_data = raw
 
         except Exception as e:
             print(f"      Could not determine sheet size: {e}")
@@ -224,6 +235,10 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
         for (search_col, update_col), rule_group in grouped_rules.items():
             print(f"      Processing column pair: {search_col} -> {update_col} ({len(rule_group)} rules)")
 
+            # Convert column letters to indices, then make relative to the used range origin
+            search_col_idx = column_letter_to_index(search_col) - origin_col
+            update_col_idx = column_letter_to_index(update_col) - origin_col
+
             # Create lookup dictionary: search_value -> (target_value, rule_name)
             # Also detect duplicate search_values which would overwrite each other
             lookup = {}
@@ -238,20 +253,11 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                 lookup[search_val] = (rule['target_value'], rule['name'])
                 update_details[rule['name']] = 0
 
-            # Read only the two columns needed — far faster than reading the whole sheet
-            raw_search = sheet.range(f"{search_col}{first_row}:{search_col}{last_row}").value
-            search_data = raw_search if isinstance(raw_search, list) else [raw_search]
-
-            if update_col == search_col:
-                update_data = search_data
-            else:
-                raw_update = sheet.range(f"{update_col}{first_row}:{update_col}{last_row}").value
-                update_data = raw_update if isinstance(raw_update, list) else [raw_update]
-
             # SINGLE PASS through all rows for this column pair
             for row_idx in range(rows_to_process):
                 try:
-                    search_cell_value = search_data[row_idx]
+                    # Read from in-memory bulk data (no COM call)
+                    search_cell_value = all_data[row_idx][search_col_idx]
 
                     if search_cell_value is None or (isinstance(search_cell_value, str) and not search_cell_value.strip()):
                         continue
@@ -267,21 +273,22 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                     else:
                         continue
 
-                    current_value = update_data[row_idx]
+                    # Read current update cell value from in-memory bulk data (no COM call)
+                    current_value = all_data[row_idx][update_col_idx]
                     current_value_str = str(current_value) if current_value is not None else ""
 
                     # Check if update is needed
                     if current_value_str.strip() != target_value.strip():
-                        actual_row = first_row + row_idx
-                        sheet.range(f"{update_col}{actual_row}").value = target_value
+                        # Write via COM only for cells that actually changed
+                        used_range[row_idx, update_col_idx].value = target_value
                         update_details[rule_name] += 1
                         total_updates += 1
-                        all_affected_rows.add(actual_row)
+                        all_affected_rows.add(origin_row + row_idx)
 
                 except Exception:
                     # Skip problematic cells (merged cells, formulas with errors, etc.)
                     # Log at DEBUG level to help troubleshooting without cluttering production logs
-                    logging.debug(f"Skipped cell at row {first_row + row_idx}, column {search_col}", exc_info=True)
+                    logging.debug(f"Skipped cell at row {origin_row + row_idx}, column index {search_col_idx}", exc_info=True)
                     continue
 
             # Print results for this column pair
