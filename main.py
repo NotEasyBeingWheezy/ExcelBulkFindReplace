@@ -165,143 +165,118 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
     """
     Process sheet with search-and-update rules - OPTIMIZED VERSION
 
-    Supports two rule modes:
-    1. Search-based: Search search_column for search_value, then update update_column
-    2. Direct cell (target_cell): Set a specific cell to target_value regardless of current content
+    For each rule:
+    1. Search the search_column for search_value
+    2. When found, check the update_column in the same row
+    3. If the value differs from target_value, update it
 
-    OPTIMIZATION: Groups search rules by column pair and processes in a single pass
+    OPTIMIZATION: Groups rules by column pair and processes in a single pass
     """
     try:
         print(f"      Analyzing sheet structure")
+
+        # Get used range safely
+        try:
+            used_range = sheet.used_range
+            if used_range is None:
+                print(f"      Sheet appears empty, skipping")
+                return 0, {}
+
+            rows, cols = used_range.shape
+            rows_to_process = min(rows, max_rows_to_process)
+
+            print(f"      Sheet has {rows} rows x {cols} columns; processing first {rows_to_process} rows")
+
+        except Exception as e:
+            print(f"      Could not determine sheet size: {e}")
+            return 0, {}
+
+        # OPTIMIZATION: Group rules by search/update column pair for single-pass processing
+        grouped_rules = {}
+        for rule in rules:
+            search_col = rule['search_column']
+            update_col = rule['update_column']
+            key = (search_col, update_col)
+
+            if key not in grouped_rules:
+                grouped_rules[key] = []
+
+            grouped_rules[key].append({
+                'name': rule.get('name', 'Unnamed rule'),
+                'search_value': str(rule['search_value']).strip().lower(),
+                'target_value': str(rule['target_value']),
+                'original_search': str(rule['search_value'])  # For display
+            })
+
+        print(f"      Optimized: {len(rules)} rules grouped into {len(grouped_rules)} column pair(s)")
 
         total_updates = 0
         update_details = {}
         all_affected_rows = set()
 
-        # Separate direct cell replacement rules from search-based rules
-        direct_cell_rules = [r for r in rules if r.get('target_cell')]
-        search_rules = [r for r in rules if not r.get('target_cell')]
+        # Process each column pair group
+        for (search_col, update_col), rule_group in grouped_rules.items():
+            print(f"      Processing column pair: {search_col} -> {update_col} ({len(rule_group)} rules)")
 
-        # Process direct cell replacement rules (no content matching needed)
-        for rule in direct_cell_rules:
-            cell_addr = rule['target_cell']
-            target_value = str(rule['target_value'])
-            rule_name = rule.get('name', 'Unnamed rule')
-            update_details[rule_name] = 0
+            # Convert column letters to indices
+            search_col_idx = column_letter_to_index(search_col)
+            update_col_idx = column_letter_to_index(update_col)
 
-            try:
-                cell = sheet.range(cell_addr)
-                current_value = cell.value
-                current_str = str(current_value) if current_value is not None else ""
+            # Create lookup dictionary: search_value -> (target_value, rule_name)
+            # Also detect duplicate search_values which would overwrite each other
+            lookup = {}
+            for rule in rule_group:
+                search_val = rule['search_value']
+                if search_val in lookup:
+                    existing_rule = lookup[search_val][1]
+                    print(f"        WARNING: Duplicate search value '{rule['original_search']}' found!")
+                    print(f"          Rule '{existing_rule}' will be overwritten by '{rule['name']}'")
+                    print(f"          Note: '{existing_rule}' will show 0 updates in statistics")
+                    logging.warning(f"Duplicate search_value '{rule['original_search']}' in rules '{existing_rule}' and '{rule['name']}' - last rule takes precedence, first rule will show 0 updates")
+                lookup[search_val] = (rule['target_value'], rule['name'])
+                update_details[rule['name']] = 0
 
-                if current_str.strip() != target_value.strip():
-                    cell.value = target_value
-                    update_details[rule_name] += 1
-                    total_updates += 1
-                    all_affected_rows.add(cell.row)
-                    print(f"        '{rule_name}': updated cell {cell_addr}")
-            except Exception as e:
-                print(f"        Error updating cell {cell_addr}: {e}")
-                logging.exception(f"Failed to update cell {cell_addr} in sheet '{sheet.name}'")
+            # SINGLE PASS through all rows for this column pair
+            for row_idx in range(rows_to_process):
+                try:
+                    # Get the search cell value
+                    search_cell = used_range[row_idx, search_col_idx]
+                    search_cell_value = search_cell.value
 
-        # Process search-based rules if any
-        if search_rules:
-            # Get used range safely
-            try:
-                used_range = sheet.used_range
-                if used_range is None:
-                    print(f"      Sheet appears empty, skipping search rules")
-                else:
-                    rows, cols = used_range.shape
-                    rows_to_process = min(rows, max_rows_to_process)
+                    if not search_cell_value:
+                        continue
 
-                    print(f"      Sheet has {rows} rows x {cols} columns; processing first {rows_to_process} rows")
+                    # Normalize the search value
+                    normalized_search = str(search_cell_value).strip().lower()
 
-                    # OPTIMIZATION: Group rules by search/update column pair for single-pass processing
-                    grouped_rules = {}
-                    for rule in search_rules:
-                        search_col = rule['search_column']
-                        update_col = rule['update_column']
-                        key = (search_col, update_col)
+                    # Check if this value matches any rule
+                    if normalized_search in lookup:
+                        target_value, rule_name = lookup[normalized_search]
 
-                        if key not in grouped_rules:
-                            grouped_rules[key] = []
+                        # Get the update cell
+                        update_cell = used_range[row_idx, update_col_idx]
+                        current_value = update_cell.value
+                        current_value_str = str(current_value) if current_value is not None else ""
 
-                        grouped_rules[key].append({
-                            'name': rule.get('name', 'Unnamed rule'),
-                            'search_value': str(rule['search_value']).strip().lower(),
-                            'target_value': str(rule['target_value']),
-                            'original_search': str(rule['search_value'])  # For display
-                        })
+                        # Check if update is needed
+                        if current_value_str.strip() != target_value.strip():
+                            # Update the cell
+                            update_cell.value = target_value
+                            update_details[rule_name] += 1
+                            total_updates += 1
+                            all_affected_rows.add(row_idx + 1)
 
-                    print(f"      Optimized: {len(search_rules)} rules grouped into {len(grouped_rules)} column pair(s)")
+                except Exception:
+                    # Skip problematic cells (merged cells, formulas with errors, etc.)
+                    # Log at DEBUG level to help troubleshooting without cluttering production logs
+                    logging.debug(f"Skipped cell at row {row_idx + 1}, column index {search_col_idx}", exc_info=True)
+                    continue
 
-                    # Process each column pair group
-                    for (search_col, update_col), rule_group in grouped_rules.items():
-                        print(f"      Processing column pair: {search_col} -> {update_col} ({len(rule_group)} rules)")
-
-                        # Convert column letters to indices
-                        search_col_idx = column_letter_to_index(search_col)
-                        update_col_idx = column_letter_to_index(update_col)
-
-                        # Create lookup dictionary: search_value -> (target_value, rule_name)
-                        # Also detect duplicate search_values which would overwrite each other
-                        lookup = {}
-                        for rule in rule_group:
-                            search_val = rule['search_value']
-                            if search_val in lookup:
-                                existing_rule = lookup[search_val][1]
-                                print(f"        WARNING: Duplicate search value '{rule['original_search']}' found!")
-                                print(f"          Rule '{existing_rule}' will be overwritten by '{rule['name']}'")
-                                print(f"          Note: '{existing_rule}' will show 0 updates in statistics")
-                                logging.warning(f"Duplicate search_value '{rule['original_search']}' in rules '{existing_rule}' and '{rule['name']}' - last rule takes precedence, first rule will show 0 updates")
-                            lookup[search_val] = (rule['target_value'], rule['name'])
-                            update_details[rule['name']] = 0
-
-                        # SINGLE PASS through all rows for this column pair
-                        for row_idx in range(rows_to_process):
-                            try:
-                                # Get the search cell value
-                                search_cell = used_range[row_idx, search_col_idx]
-                                search_cell_value = search_cell.value
-
-                                if not search_cell_value:
-                                    continue
-
-                                # Normalize the search value
-                                normalized_search = str(search_cell_value).strip().lower()
-
-                                # Check if this value matches any rule
-                                if normalized_search in lookup:
-                                    target_value, rule_name = lookup[normalized_search]
-
-                                    # Get the update cell
-                                    update_cell = used_range[row_idx, update_col_idx]
-                                    current_value = update_cell.value
-                                    current_value_str = str(current_value) if current_value is not None else ""
-
-                                    # Check if update is needed
-                                    if current_value_str.strip() != target_value.strip():
-                                        # Update the cell
-                                        update_cell.value = target_value
-                                        update_details[rule_name] += 1
-                                        total_updates += 1
-                                        all_affected_rows.add(row_idx + 1)
-
-                            except Exception:
-                                # Skip problematic cells (merged cells, formulas with errors, etc.)
-                                # Log at DEBUG level to help troubleshooting without cluttering production logs
-                                logging.debug(f"Skipped cell at row {row_idx + 1}, column index {search_col_idx}", exc_info=True)
-                                continue
-
-                        # Print results for this column pair
-                        for rule in rule_group:
-                            count = update_details[rule['name']]
-                            if count > 0:
-                                print(f"        '{rule['name']}': {count} updates")
-
-            except Exception as e:
-                print(f"      Could not determine sheet size: {e}")
+            # Print results for this column pair
+            for rule in rule_group:
+                count = update_details[rule['name']]
+                if count > 0:
+                    print(f"        '{rule['name']}': {count} updates")
 
         # Set row heights for all affected rows at once (more efficient)
         if all_affected_rows:
@@ -558,7 +533,6 @@ def main():
 
         sheet_rules[sheet_name].append({
             'name': rule.get('name', 'Unnamed rule'),
-            'target_cell': rule.get('target_cell'),
             'search_column': rule.get('search_column'),
             'search_value': rule.get('search_value'),
             'update_column': rule.get('update_column'),
