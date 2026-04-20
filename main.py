@@ -260,8 +260,16 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
 
                         # Check if update is needed
                         if current_value_str.strip() != target_value.strip():
-                            # Update the cell
+                            # Update the cell value
                             update_cell.value = target_value
+                            # If the cell has a hyperlink, update its destination to match
+                            # so that clicking it goes to the new URL, not the old one
+                            try:
+                                if update_cell.api.Hyperlinks.Count > 0:
+                                    update_cell.api.Hyperlinks(1).Address = target_value
+                                    update_cell.api.Hyperlinks(1).TextToDisplay = target_value
+                            except Exception:
+                                pass
                             update_details[rule_name] += 1
                             total_updates += 1
                             all_affected_rows.add(row_idx + 1)
