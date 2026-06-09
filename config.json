@@ -11,21 +11,39 @@
   },
   "search_and_update_rules": [
     {
-      "name": "Replace initials X coordinate of 23.37 with 23.47",
+      "name": "E Line Titanium Helmet Price Update",
       "sheet_name": "Std Cricket Products Upload",
-      "search_column": "CY",
-      "search_value": "23.37",
-      "update_column": "CY",
-      "target_value": "23.47",
+      "search_column": "M",
+      "search_value": "MASELT",
+      "update_column": "S",
+      "target_value": "220",
       "enabled": true
     },
     {
-      "name": "Replace initials X coordinate of 23.37 with 23.47",
+      "name": "T Line Titanium Helmet Price Update",
       "sheet_name": "Std Cricket Products Upload",
-      "search_column": "CY",
-      "search_value": "23.7",
-      "update_column": "CY",
-      "target_value": "23.47",
+      "search_column": "M",
+      "search_value": "MASTLT",
+      "update_column": "S",
+      "target_value": "185",
+      "enabled": true
+    },
+        {
+      "name": "T Line Steel Helmet Price Update",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASTLS",
+      "update_column": "S",
+      "target_value": "124",
+      "enabled": true
+    },
+    {
+      "name": "T Line Steel Helmet Junior Price Update",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASTLSJR",
+      "update_column": "S",
+      "target_value": "100",
       "enabled": true
     }
   ],
