@@ -187,19 +187,36 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
 
             rows, cols = used_range.shape
             rows_to_process = min(rows, max_rows_to_process)
-            # Capture origin so absolute column indices can be converted to relative offsets
-            origin_row = used_range.row      # 1-based sheet row of first cell in used range
-            origin_col = used_range.column - 1  # 0-based sheet column of first cell
+            # 1-based sheet row of the first cell in the used range; used to map
+            # processed rows back to absolute sheet rows when writing/sizing.
+            origin_row = used_range.row
 
-            print(f"      Sheet has {rows} rows x {cols} columns; processing first {rows_to_process} rows")
+            # Right-most column any rule for this sheet actually references. We
+            # read a bounded block (column A .. this column) rather than the whole
+            # used range: a "bloated" used range (stray formatting or leftover
+            # data far down/right) can make used_range.value try to marshal
+            # billions of cells and fail with COM error 0x8007000E,
+            # "Not enough memory resources are available to complete this operation".
+            max_needed_col = max(
+                max(column_letter_to_index(r['search_column']),
+                    column_letter_to_index(r['update_column']))
+                for r in rules
+            )
+            last_row = origin_row + rows_to_process - 1
+            cols_to_read = max_needed_col + 1  # reading from column A (index 0)
 
-            # Bulk-read all cell values in one COM call instead of per-cell reads
-            raw = used_range.value
-            if rows == 1 and cols == 1:
+            print(f"      Sheet used range is {rows} rows x {cols} columns; "
+                  f"reading first {rows_to_process} row(s) x {cols_to_read} column(s)")
+
+            # Bulk-read only the bounded block in one COM call. Anchoring at
+            # column A keeps in-memory indices aligned with absolute column
+            # indices (A=0, B=1, ...).
+            raw = sheet.range((origin_row, 1), (last_row, cols_to_read)).value
+            if rows_to_process == 1 and cols_to_read == 1:
                 all_data = [[raw]]
-            elif rows == 1:
+            elif rows_to_process == 1:
                 all_data = [raw]
-            elif cols == 1:
+            elif cols_to_read == 1:
                 all_data = [[v] for v in raw]
             else:
                 all_data = raw
@@ -235,9 +252,9 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
         for (search_col, update_col), rule_group in grouped_rules.items():
             print(f"      Processing column pair: {search_col} -> {update_col} ({len(rule_group)} rules)")
 
-            # Convert column letters to indices, then make relative to the used range origin
-            search_col_idx = column_letter_to_index(search_col) - origin_col
-            update_col_idx = column_letter_to_index(update_col) - origin_col
+            # Absolute zero-based column indices (data was read starting at column A)
+            search_col_idx = column_letter_to_index(search_col)
+            update_col_idx = column_letter_to_index(update_col)
 
             # Create lookup dictionary: search_value -> (target_value, rule_name)
             # Also detect duplicate search_values which would overwrite each other
@@ -279,8 +296,10 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
 
                     # Check if update is needed
                     if current_value_str.strip() != target_value.strip():
-                        # Write via COM only for cells that actually changed
-                        used_range[row_idx, update_col_idx].value = target_value
+                        # Write via COM only for cells that actually changed.
+                        # Map back to the absolute sheet cell: origin_row is the
+                        # used range's first row, columns are absolute (A=0).
+                        sheet.range((origin_row + row_idx, update_col_idx + 1)).value = target_value
                         update_details[rule_name] += 1
                         total_updates += 1
                         all_affected_rows.add(origin_row + row_idx)
