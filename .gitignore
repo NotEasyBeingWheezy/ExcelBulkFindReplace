@@ -1,0 +1,15 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Excel processor run output
+excel_processor_log_*.txt
+excel_processor_errors_*.txt
+excel_processor_no_changes_*.txt
+
+# Backups created by the script
+backups/
+
+# Excel temporary lock files
+~$*
