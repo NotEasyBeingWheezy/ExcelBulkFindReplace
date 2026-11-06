@@ -15,8 +15,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASELBGP",
-      "update_column": "S",
-      "target_value": "125",
+      "updates": [
+        { "update_column": "S", "target_value": "125" }
+      ],
       "enabled": true
     },
     {
@@ -24,17 +25,19 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASELBG",
-      "update_column": "S",
-      "target_value": "105",
+      "updates": [
+        { "update_column": "S", "target_value": "105" }
+      ],
       "enabled": true
     },
-        {
+    {
       "name": "T Line Batting Gloves",
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASTLBG",
-      "update_column": "S",
-      "target_value": "75",
+      "updates": [
+        { "update_column": "S", "target_value": "75" }
+      ],
       "enabled": true
     },
     {
@@ -42,8 +45,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASCLBG",
-      "update_column": "S",
-      "target_value": "55",
+      "updates": [
+        { "update_column": "S", "target_value": "55" }
+      ],
       "enabled": true
     },
     {
@@ -51,17 +55,19 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASELBGJ",
-      "update_column": "S",
-      "target_value": "55",
+      "updates": [
+        { "update_column": "S", "target_value": "55" }
+      ],
       "enabled": true
     },
     {
-      "name": "E Line Batting Pads ",
+      "name": "E Line Batting Pads",
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASELBP",
-      "update_column": "S",
-      "target_value": "145",
+      "updates": [
+        { "update_column": "S", "target_value": "145" }
+      ],
       "enabled": true
     },
     {
@@ -69,8 +75,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASTLBP",
-      "update_column": "S",
-      "target_value": "105",
+      "updates": [
+        { "update_column": "S", "target_value": "105" }
+      ],
       "enabled": true
     },
     {
@@ -78,8 +85,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASCLBP",
-      "update_column": "S",
-      "target_value": "75",
+      "updates": [
+        { "update_column": "S", "target_value": "75" }
+      ],
       "enabled": true
     },
     {
@@ -87,8 +95,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASELBPJ",
-      "update_column": "S",
-      "target_value": "75",
+      "updates": [
+        { "update_column": "S", "target_value": "75" }
+      ],
       "enabled": true
     },
     {
@@ -96,8 +105,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASELTP",
-      "update_column": "S",
-      "target_value": "55",
+      "updates": [
+        { "update_column": "S", "target_value": "55" }
+      ],
       "enabled": true
     },
     {
@@ -105,8 +115,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASTLTP",
-      "update_column": "S",
-      "target_value": "45",
+      "updates": [
+        { "update_column": "S", "target_value": "45" }
+      ],
       "enabled": true
     },
     {
@@ -114,8 +125,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASTLTPJ",
-      "update_column": "S",
-      "target_value": "45",
+      "updates": [
+        { "update_column": "S", "target_value": "45" }
+      ],
       "enabled": true
     },
     {
@@ -123,8 +135,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "NXT0109",
-      "update_column": "S",
-      "target_value": "14",
+      "updates": [
+        { "update_column": "S", "target_value": "14" }
+      ],
       "enabled": true
     },
     {
@@ -132,8 +145,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "NXT0112",
-      "update_column": "S",
-      "target_value": "11",
+      "updates": [
+        { "update_column": "S", "target_value": "11" }
+      ],
       "enabled": true
     },
     {
@@ -141,8 +155,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASTLTWK",
-      "update_column": "S",
-      "target_value": "185",
+      "updates": [
+        { "update_column": "S", "target_value": "185" }
+      ],
       "enabled": true
     },
     {
@@ -150,8 +165,9 @@
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
       "search_value": "MASTLSWK",
-      "update_column": "S",
-      "target_value": "125",
+      "updates": [
+        { "update_column": "S", "target_value": "125" }
+      ],
       "enabled": true
     }
   ],
