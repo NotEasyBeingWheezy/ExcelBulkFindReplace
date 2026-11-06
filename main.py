@@ -12,6 +12,7 @@ Modified to support search-and-update functionality with JSON configuration
 """
 
 import os
+import re
 import sys
 import shutil
 import platform
@@ -161,19 +162,91 @@ def column_index_to_letter(col_index):
         temp //= 26
     return letter
 
+COLUMN_LETTERS_PATTERN = re.compile(r'^[A-Z]{1,3}$')
+
+def normalize_rule(raw_rule):
+    """
+    Validate a rule from config.json and convert it to the internal form:
+
+        {
+            'name': 'Rule description',
+            'search_column': 'M',
+            'search_value': 'MASELBGP',
+            'updates': [
+                {'update_column': 'S', 'target_value': '125'},
+                {'update_column': 'T', 'target_value': 'In stock'}
+            ]
+        }
+
+    A rule's update pairs can be given as a single top-level
+    "update_column"/"target_value" pair, as a list under "updates", or both
+    (the top-level pair is applied first).
+
+    Returns (rule, None) on success, or (None, reason) if the rule is invalid.
+    """
+    name = raw_rule.get('name', 'Unnamed rule')
+
+    search_column = str(raw_rule.get('search_column') or '').strip().upper()
+    if not COLUMN_LETTERS_PATTERN.match(search_column):
+        return None, f"invalid or missing 'search_column' ({raw_rule.get('search_column')!r})"
+
+    search_value = raw_rule.get('search_value')
+    if search_value is None or not str(search_value).strip():
+        return None, "missing 'search_value'"
+
+    pairs = []
+    if 'update_column' in raw_rule or 'target_value' in raw_rule:
+        pairs.append(raw_rule)
+
+    extra_updates = raw_rule.get('updates', [])
+    if not isinstance(extra_updates, list):
+        return None, "'updates' must be a list of {\"update_column\": ..., \"target_value\": ...} objects"
+    pairs.extend(extra_updates)
+
+    if not pairs:
+        return None, "no update configured (set 'update_column' and 'target_value', or 'updates')"
+
+    updates = []
+    seen_columns = set()
+    for i, pair in enumerate(pairs, 1):
+        if not isinstance(pair, dict):
+            return None, f"update #{i} must be an object with 'update_column' and 'target_value'"
+
+        update_column = str(pair.get('update_column') or '').strip().upper()
+        if not COLUMN_LETTERS_PATTERN.match(update_column):
+            return None, f"update #{i} has an invalid or missing 'update_column' ({pair.get('update_column')!r})"
+
+        target_value = pair.get('target_value')
+        if target_value is None:
+            return None, f"update #{i} (column {update_column}) is missing 'target_value'"
+
+        if update_column in seen_columns:
+            return None, f"column {update_column} is listed more than once"
+        seen_columns.add(update_column)
+
+        updates.append({'update_column': update_column, 'target_value': target_value})
+
+    return {
+        'name': name,
+        'search_column': search_column,
+        'search_value': search_value,
+        'updates': updates,
+    }, None
+
 def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
     """
     Process sheet with search-and-update rules - OPTIMIZED VERSION
 
-    For each rule:
+    For each rule (as returned by normalize_rule):
     1. Search the search_column for search_value
-    2. When found, check the update_column in the same row
-    3. If the value differs from target_value, update it
+    2. When found, check each of the rule's update columns in the same row
+    3. If a value differs from its target_value, update it
 
     Use "*" as search_value to match any non-empty cell in search_column.
     Exact matches take precedence over a wildcard on the same column pair.
 
-    OPTIMIZATION: Groups rules by column pair and processes in a single pass
+    OPTIMIZATION: Expands each rule into one entry per update column, groups
+    those by search/update column pair, and processes each pair in a single pass
     """
     try:
         print(f"      Analyzing sheet structure")
@@ -198,9 +271,9 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
             # billions of cells and fail with COM error 0x8007000E,
             # "Not enough memory resources are available to complete this operation".
             max_needed_col = max(
-                max(column_letter_to_index(r['search_column']),
-                    column_letter_to_index(r['update_column']))
+                column_letter_to_index(col)
                 for r in rules
+                for col in [r['search_column']] + [u['update_column'] for u in r['updates']]
             )
             last_row = origin_row + rows_to_process - 1
             cols_to_read = max_needed_col + 1  # reading from column A (index 0)
@@ -225,27 +298,27 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
             print(f"      Could not determine sheet size: {e}")
             return 0, {}
 
-        # OPTIMIZATION: Group rules by search/update column pair for single-pass processing
+        # OPTIMIZATION: Expand each rule into one entry per update column, then
+        # group by search/update column pair for single-pass processing. A rule
+        # with several update columns therefore appears in several groups.
         grouped_rules = {}
         for rule in rules:
-            search_col = rule['search_column']
-            update_col = rule['update_column']
-            key = (search_col, update_col)
+            for update in rule['updates']:
+                key = (rule['search_column'], update['update_column'])
+                grouped_rules.setdefault(key, []).append({
+                    'name': rule['name'],
+                    'search_value': str(rule['search_value']).strip().lower(),
+                    'target_value': str(update['target_value']),
+                    'original_search': str(rule['search_value'])  # For display
+                })
 
-            if key not in grouped_rules:
-                grouped_rules[key] = []
-
-            grouped_rules[key].append({
-                'name': rule.get('name', 'Unnamed rule'),
-                'search_value': str(rule['search_value']).strip().lower(),
-                'target_value': str(rule['target_value']),
-                'original_search': str(rule['search_value'])  # For display
-            })
-
-        print(f"      Optimized: {len(rules)} rules grouped into {len(grouped_rules)} column pair(s)")
+        total_rule_updates = sum(len(group) for group in grouped_rules.values())
+        print(f"      Optimized: {len(rules)} rule(s) with {total_rule_updates} update column(s) "
+              f"grouped into {len(grouped_rules)} column pair(s)")
 
         total_updates = 0
-        update_details = {}
+        # Per-rule totals, summed across all of the rule's update columns
+        update_details = {rule['name']: 0 for rule in rules}
         all_affected_rows = set()
 
         # Process each column pair group
@@ -256,6 +329,9 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
             search_col_idx = column_letter_to_index(search_col)
             update_col_idx = column_letter_to_index(update_col)
 
+            # Updates made by each rule in this column pair only (for display)
+            pair_counts = {}
+
             # Create lookup dictionary: search_value -> (target_value, rule_name)
             # Also detect duplicate search_values which would overwrite each other
             lookup = {}
@@ -263,12 +339,12 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                 search_val = rule['search_value']
                 if search_val in lookup:
                     existing_rule = lookup[search_val][1]
-                    print(f"        WARNING: Duplicate search value '{rule['original_search']}' found!")
+                    print(f"        WARNING: Duplicate search value '{rule['original_search']}' found for column {update_col}!")
                     print(f"          Rule '{existing_rule}' will be overwritten by '{rule['name']}'")
-                    print(f"          Note: '{existing_rule}' will show 0 updates in statistics")
-                    logging.warning(f"Duplicate search_value '{rule['original_search']}' in rules '{existing_rule}' and '{rule['name']}' - last rule takes precedence, first rule will show 0 updates")
+                    print(f"          Note: '{existing_rule}' will make no updates to column {update_col}")
+                    logging.warning(f"Duplicate search_value '{rule['original_search']}' for update column {update_col} in rules '{existing_rule}' and '{rule['name']}' - last rule takes precedence, first rule will make no updates to column {update_col}")
                 lookup[search_val] = (rule['target_value'], rule['name'])
-                update_details[rule['name']] = 0
+                pair_counts[rule['name']] = 0
 
             # SINGLE PASS through all rows for this column pair
             for row_idx in range(rows_to_process):
@@ -301,6 +377,7 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                         # used range's first row, columns are absolute (A=0).
                         sheet.range((origin_row + row_idx, update_col_idx + 1)).value = target_value
                         update_details[rule_name] += 1
+                        pair_counts[rule_name] += 1
                         total_updates += 1
                         all_affected_rows.add(origin_row + row_idx)
 
@@ -311,10 +388,9 @@ def process_sheet_with_rules(sheet, rules, max_rows_to_process=300):
                     continue
 
             # Print results for this column pair
-            for rule in rule_group:
-                count = update_details[rule['name']]
+            for rule_name, count in pair_counts.items():
                 if count > 0:
-                    print(f"        '{rule['name']}': {count} updates")
+                    print(f"        '{rule_name}' (column {update_col}): {count} updates")
 
         # Set row heights for all affected rows at once (more efficient)
         if all_affected_rows:
@@ -340,15 +416,17 @@ def process_excel_with_xlwings(app, filepath, sheet_rules):
         filepath: Path to Excel file
         sheet_rules: Dict of rules organized by sheet name
 
-    sheet_rules should be a dict like:
+    sheet_rules should be a dict of normalized rules (see normalize_rule) like:
     {
         "Sheet Name": [
             {
                 "name": "Rule description",
                 "search_column": "A",
                 "search_value": "Product123",
-                "update_column": "Z",
-                "target_value": "99.99"
+                "updates": [
+                    {"update_column": "Z", "target_value": "99.99"},
+                    {"update_column": "AA", "target_value": "In stock"}
+                ]
             }
         ]
     }
@@ -566,16 +644,14 @@ def main():
         if not sheet_name:
             continue
 
-        if sheet_name not in sheet_rules:
-            sheet_rules[sheet_name] = []
+        normalized_rule, error = normalize_rule(rule)
+        if error:
+            message = f"Skipping rule '{rule.get('name', 'Unnamed rule')}' on sheet '{sheet_name}': {error}"
+            print(f"\nWARNING: {message}")
+            logging.warning(message)
+            continue
 
-        sheet_rules[sheet_name].append({
-            'name': rule.get('name', 'Unnamed rule'),
-            'search_column': rule.get('search_column'),
-            'search_value': rule.get('search_value'),
-            'update_column': rule.get('update_column'),
-            'target_value': rule.get('target_value')
-        })
+        sheet_rules.setdefault(sheet_name, []).append(normalized_rule)
 
     if not sheet_rules:
         print("\nERROR: No enabled rules found in configuration!")
@@ -586,7 +662,8 @@ def main():
     for sheet_name, rules in sheet_rules.items():
         print(f"  '{sheet_name}': {len(rules)} rule(s)")
         for rule in rules:
-            print(f"    - {rule['name']}")
+            updates = ", ".join(f"{u['update_column']}='{u['target_value']}'" for u in rule['updates'])
+            print(f"    - {rule['name']}: {rule['search_column']}='{rule['search_value']}' -> {updates}")
 
     print(f"\nStarting processing")
     print(f"ALL Excel features will be preserved!")

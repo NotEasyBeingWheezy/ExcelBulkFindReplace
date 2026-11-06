@@ -88,7 +88,29 @@ Define rules to search for values and update cells:
 - `search_value`: Value to find in the search column
 - `update_column`: Column to check/update in the same row
 - `target_value`: Desired value (updates only if different)
+- `updates`: Optional list of `update_column`/`target_value` pairs, for updating several columns from one rule (see below)
 - `enabled`: Set to `false` to skip this rule
+
+#### Updating Multiple Columns in One Rule
+To update several columns in the matching row, list them under `updates`:
+```json
+{
+  "name": "E Line Pro Batting Gloves",
+  "sheet_name": "Std Cricket Products Upload",
+  "search_column": "M",
+  "search_value": "MASELBGP",
+  "updates": [
+    { "update_column": "S", "target_value": "125" },
+    { "update_column": "T", "target_value": "100" },
+    { "update_column": "U", "target_value": "In stock" }
+  ],
+  "enabled": true
+}
+```
+
+Each column is checked and updated on its own, so only the cells that differ are changed. You can also keep a top-level `update_column`/`target_value` pair and add more columns with `updates`; the top-level pair is applied first. A rule must not list the same column twice.
+
+Rules with a missing or invalid column, or a missing `target_value`, are skipped with a warning in the console and the main log.
 
 ## How It Works
 
@@ -98,7 +120,7 @@ For each Excel file in the configured folder:
 2. **For each enabled rule:**
    - Finds the specified sheet
    - Searches the `search_column` for `search_value`
-   - When a match is found:
+   - When a match is found, for each of the rule's update columns:
      - Checks the `update_column` in that same row
      - If the current value differs from `target_value`:
        - Updates it to `target_value`
