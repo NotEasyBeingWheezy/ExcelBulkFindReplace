@@ -11,39 +11,147 @@
   },
   "search_and_update_rules": [
     {
-      "name": "E Line Titanium Helmet Price Update",
+      "name": "E Line Pro Batting Gloves",
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
-      "search_value": "MASELT",
+      "search_value": "MASELBGP",
       "update_column": "S",
-      "target_value": "220",
+      "target_value": "125",
       "enabled": true
     },
     {
-      "name": "T Line Titanium Helmet Price Update",
+      "name": "E Line Batting Gloves",
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
-      "search_value": "MASTLT",
+      "search_value": "MASELBG",
+      "update_column": "S",
+      "target_value": "105",
+      "enabled": true
+    },
+        {
+      "name": "T Line Batting Gloves",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASTLBG",
+      "update_column": "S",
+      "target_value": "75",
+      "enabled": true
+    },
+    {
+      "name": "C Line Batting Gloves",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASCLBG",
+      "update_column": "S",
+      "target_value": "55",
+      "enabled": true
+    },
+    {
+      "name": "Junior E Line Batting Gloves",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASELBGJ",
+      "update_column": "S",
+      "target_value": "55",
+      "enabled": true
+    },
+    {
+      "name": "E Line Batting Pads ",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASELBP",
+      "update_column": "S",
+      "target_value": "145",
+      "enabled": true
+    },
+    {
+      "name": "T Line Batting Pads",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASTLBP",
+      "update_column": "S",
+      "target_value": "105",
+      "enabled": true
+    },
+    {
+      "name": "C Line Batting Pads",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASCLBP",
+      "update_column": "S",
+      "target_value": "75",
+      "enabled": true
+    },
+    {
+      "name": "Junior E Line Batting Pads",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASELBPJ",
+      "update_column": "S",
+      "target_value": "75",
+      "enabled": true
+    },
+    {
+      "name": "E Line Thigh Pads",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASELTP",
+      "update_column": "S",
+      "target_value": "55",
+      "enabled": true
+    },
+    {
+      "name": "T Line Thigh Pads",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASTLTP",
+      "update_column": "S",
+      "target_value": "45",
+      "enabled": true
+    },
+    {
+      "name": "Junior T Line Thigh Pads",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASTLTPJ",
+      "update_column": "S",
+      "target_value": "45",
+      "enabled": true
+    },
+    {
+      "name": "Pro Wool Socks",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "NXT0109",
+      "update_column": "S",
+      "target_value": "14",
+      "enabled": true
+    },
+    {
+      "name": "Tech Training Socks",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "NXT0112",
+      "update_column": "S",
+      "target_value": "11",
+      "enabled": true
+    },
+    {
+      "name": "T Line Titanium Wicket Keeping",
+      "sheet_name": "Std Cricket Products Upload",
+      "search_column": "M",
+      "search_value": "MASTLTWK",
       "update_column": "S",
       "target_value": "185",
       "enabled": true
     },
-        {
-      "name": "T Line Steel Helmet Price Update",
-      "sheet_name": "Std Cricket Products Upload",
-      "search_column": "M",
-      "search_value": "MASTLS",
-      "update_column": "S",
-      "target_value": "124",
-      "enabled": true
-    },
     {
-      "name": "T Line Steel Helmet Junior Price Update",
+      "name": "T Line Steel Wicket Keeping",
       "sheet_name": "Std Cricket Products Upload",
       "search_column": "M",
-      "search_value": "MASTLSJR",
+      "search_value": "MASTLSWK",
       "update_column": "S",
-      "target_value": "100",
+      "target_value": "125",
       "enabled": true
     }
   ],
