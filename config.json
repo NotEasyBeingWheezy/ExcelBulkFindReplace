@@ -161,6 +161,7 @@
     "search_value": "The value to find in the search_column. Use \"*\" to match any non-empty cell (wildcard). Exact matches take precedence over a wildcard on the same column pair.",
     "update_column": "The column to check and potentially update in the same row",
     "target_value": "The desired value for the update_column. If different, it will be updated.",
+    "updates": "Optional list to update several columns from one rule, e.g. [{\"update_column\": \"S\", \"target_value\": \"125\"}, {\"update_column\": \"T\", \"target_value\": \"In stock\"}]. Can be used instead of, or as well as, update_column/target_value.",
     "columns": "Use column letters like 'A', 'B', 'Z', 'AA', etc."
   }
 }
